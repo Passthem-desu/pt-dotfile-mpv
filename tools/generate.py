@@ -12,10 +12,15 @@ CONFIG_TARGET = CONFIG_BASE / "mpv.conf"
 
 with open(CONFIG_TARGET, "w", encoding="utf-8") as f:
     print("# Keep the MPV window open after playback", file=f)
-    print("keep-open=yes\n", file=f)
+    print("keep-open=yes", file=f)
+    print(file=f)
 
     print("# Screenshot target for key `s`", file=f)
     if platform.system() == "Windows" and Path('W:/tmp/').is_dir():
-        print("screenshot-directory=W:/tmp/\n", file=f)
+        print("screenshot-directory=W:/tmp/", file=f)
     if platform.system() == "Linux":
-        print("screenshot-directory=/tmp/\n", file=f)
+        print("screenshot-directory=/tmp/", file=f)
+    print(file=f)
+
+    print('loop-file=inf', file=f)
+    print('loop-playlist=inf', file=f)
