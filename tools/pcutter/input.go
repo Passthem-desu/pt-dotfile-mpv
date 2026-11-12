@@ -374,7 +374,7 @@ func (a *app) deleteVisual() {
 
 // ---- 命令行 ----
 
-var commands = []string{"export", "exportSeq", "exportTile", "q"}
+var commands = []string{"export", "exportKrita", "exportSeq", "exportTile", "q"}
 
 func (a *app) resetCompletion() {
 	a.cmdIdx = -1
@@ -422,6 +422,8 @@ func (a *app) exec(line string) {
 	switch f[0] {
 	case "export":
 		a.startExport(f[1:], kindVideo)
+	case "exportKrita", "exportkrita":
+		a.startExport(f[1:], kindKrita)
 	case "exportSeq", "exportseq":
 		a.startExport(f[1:], kindImages)
 	case "exportTile", "exporttile":
@@ -439,6 +441,7 @@ const (
 	kindVideo outKind = iota
 	kindImages
 	kindTile
+	kindKrita
 )
 
 // exportTarget 决定导出到哪、什么格式。绝不写回源文件。
@@ -450,14 +453,23 @@ func exportTarget(info core.Info, args []string, want outKind) (string, outKind,
 	if len(args) > 0 {
 		out = args[0]
 	}
-	// :export 只在参数带图片扩展名时转成序列帧；:exportSeq 总是序列帧
+	// :export 只在参数带图片扩展名时转成序列帧；带 .kra 时走 Krita 导出
 	if want == kindVideo && isImageExt(out) {
 		want = kindImages
+	}
+	if want == kindVideo && strings.EqualFold(filepath.Ext(out), ".kra") {
+		want = kindKrita
 	}
 	switch want {
 	case kindTile:
 		if out == "" {
 			out = filepath.Join(dir, base+"-tile.png")
+		}
+	case kindKrita:
+		if out == "" {
+			out = filepath.Join(dir, base+"-krita.kra")
+		} else if !strings.EqualFold(filepath.Ext(out), ".kra") {
+			out += ".kra"
 		}
 	case kindImages:
 		if out == "" {
@@ -574,6 +586,8 @@ func (a *app) exportNow(args []string, want outKind, tileW int) {
 			err = core.ExportImages(ctx, info, snap, out)
 		case kindTile:
 			err = core.ExportTile(ctx, info, snap, out, tileW)
+		case kindKrita:
+			err = core.ExportKrita(ctx, info, snap, out)
 		default:
 			err = core.ExportVideo(ctx, info, snap, out, videoCRF)
 		}

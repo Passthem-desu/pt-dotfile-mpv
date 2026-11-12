@@ -73,16 +73,21 @@ func runFFmpeg(ctx context.Context, args []string) error {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		msg := bytes.TrimSpace(stderr.Bytes())
-		if len(msg) > 800 {
-			msg = msg[len(msg)-800:]
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return fmt.Errorf("ffmpeg 失败: %s", msg)
+		return ffmpegFail(ctx, stderr.Bytes())
 	}
 	return nil
+}
+
+// ffmpegFail 把 ffmpeg 的 stderr 尾巴变成一条错误。取消时优先报取消。
+func ffmpegFail(ctx context.Context, stderr []byte) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	msg := bytes.TrimSpace(stderr)
+	if len(msg) > 800 {
+		msg = msg[len(msg)-800:]
+	}
+	return fmt.Errorf("ffmpeg 失败: %s", msg)
 }
 
 // ExportVideo 把输出序列重编码成一个新视频（不封装音频）。

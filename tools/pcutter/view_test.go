@@ -214,6 +214,10 @@ func TestCommandCompletion(t *testing.T) {
 		t.Fatalf("Tab 补全: %q", a.cmd)
 	}
 	tst.Key(0, ui.KeyTab)
+	if a.cmd != "exportKrita" {
+		t.Fatalf("再 Tab: %q", a.cmd)
+	}
+	tst.Key(0, ui.KeyTab)
 	if a.cmd != "exportSeq" {
 		t.Fatalf("再 Tab: %q", a.cmd)
 	}
@@ -287,6 +291,26 @@ func TestExportTarget(t *testing.T) {
 	out, kind, err = exportTarget(info, []string{"/tmp/z.mkv"}, kindVideo)
 	if err != nil || kind != kindVideo || out != "/tmp/z.mkv" {
 		t.Fatalf("视频 = %q (%v) %v", out, kind, err)
+	}
+
+	// exportKrita：默认名带 -krita，没写扩展名就补 .kra
+	out, kind, err = exportTarget(info, nil, kindKrita)
+	if err != nil || kind != kindKrita || out != filepath.Join("/v", "clip-krita.kra") {
+		t.Fatalf("krita 默认名 = %q (%v) %v", out, kind, err)
+	}
+	for _, c := range []struct{ args, want string }{
+		{"/tmp/k", "/tmp/k.kra"},
+		{"/tmp/k.kra", "/tmp/k.kra"},
+	} {
+		out, kind, err = exportTarget(info, []string{c.args}, kindKrita)
+		if err != nil || kind != kindKrita || out != c.want {
+			t.Fatalf("krita %q = %q (%v) %v, want %q", c.args, out, kind, err, c.want)
+		}
+	}
+	// :export X.kra 也走 Krita 导出
+	out, kind, err = exportTarget(info, []string{"/tmp/z.kra"}, kindVideo)
+	if err != nil || kind != kindKrita || out != "/tmp/z.kra" {
+		t.Fatalf("export .kra = %q (%v) %v", out, kind, err)
 	}
 }
 
@@ -521,6 +545,43 @@ func TestExportSeqShortcut(t *testing.T) {
 	}
 	if !strings.HasSuffix(a.busy, "s_%04d.png") {
 		t.Fatalf("busy = %q（应该导序列帧）", a.busy)
+	}
+	if a.cancel != nil {
+		a.cancel()
+	}
+}
+
+// :exportKrita 走 Krita 动画导出，没写扩展名就补 .kra。
+func TestExportKritaStarts(t *testing.T) {
+	a := testApp(30)
+	tst := newTester(t, a)
+
+	tst.TypeKey(ui.Shift, ui.KeySemicolon, ":")
+	tst.Type("exportKrita " + filepath.Join(t.TempDir(), "k"))
+	tst.Key(0, ui.KeyEnter)
+
+	if a.confirm != nil {
+		t.Fatal("Krita 导出不该弹框")
+	}
+	if !strings.HasSuffix(a.busy, "k.kra") {
+		t.Fatalf("busy = %q（应该导 .kra）", a.busy)
+	}
+	if a.cancel != nil {
+		a.cancel()
+	}
+}
+
+// :exportKrita 不给名字 → 源文件旁边生成 <名字>-krita.kra。
+func TestExportKritaDefaultName(t *testing.T) {
+	a := testApp(30)
+	tst := newTester(t, a)
+
+	tst.TypeKey(ui.Shift, ui.KeySemicolon, ":")
+	tst.Type("exportKrita")
+	tst.Key(0, ui.KeyEnter)
+
+	if !strings.HasSuffix(a.busy, "demo-krita.kra") {
+		t.Fatalf("busy = %q", a.busy)
 	}
 	if a.cancel != nil {
 		a.cancel()
