@@ -374,7 +374,7 @@ func (a *app) deleteVisual() {
 
 // ---- 命令行 ----
 
-var commands = []string{"export", "exportTile", "q"}
+var commands = []string{"export", "exportSeq", "exportTile", "q"}
 
 func (a *app) resetCompletion() {
 	a.cmdIdx = -1
@@ -422,6 +422,8 @@ func (a *app) exec(line string) {
 	switch f[0] {
 	case "export":
 		a.startExport(f[1:], kindVideo)
+	case "exportSeq", "exportseq":
+		a.startExport(f[1:], kindImages)
 	case "exportTile", "exporttile":
 		a.startExport(f[1:], kindTile)
 	case "q", "quit":
@@ -448,26 +450,24 @@ func exportTarget(info core.Info, args []string, want outKind) (string, outKind,
 	if len(args) > 0 {
 		out = args[0]
 	}
-	if want == kindTile {
+	// :export 只在参数带图片扩展名时转成序列帧；:exportSeq 总是序列帧
+	if want == kindVideo && isImageExt(out) {
+		want = kindImages
+	}
+	switch want {
+	case kindTile:
 		if out == "" {
 			out = filepath.Join(dir, base+"-tile.png")
 		}
-	} else if out == "" {
-		if want == kindImages {
-			out = filepath.Join(dir, base+"_%04d.png")
-		} else {
-			out = filepath.Join(dir, base+"-pcut.mp4")
+	case kindImages:
+		if out == "" {
+			out = filepath.Join(dir, base)
 		}
-	} else {
-		switch strings.ToLower(filepath.Ext(out)) {
-		case ".png", ".jpg", ".jpeg", ".webp":
-			want = kindImages
-			if !strings.Contains(out, "%") {
-				ext := filepath.Ext(out)
-				out = strings.TrimSuffix(out, ext) + "_%04d" + ext
-			}
-		default:
-			want = kindVideo
+		out = sequencePath(out)
+	default:
+		want = kindVideo
+		if out == "" {
+			out = filepath.Join(dir, base+"-pcut.mp4")
 		}
 	}
 	if src, err := filepath.Abs(info.Path); err == nil {
@@ -476,6 +476,29 @@ func exportTarget(info core.Info, args []string, want outKind) (string, outKind,
 		}
 	}
 	return out, want, nil
+}
+
+// isImageExt 判断是不是序列帧能用的图片扩展名。
+func isImageExt(p string) bool {
+	switch strings.ToLower(filepath.Ext(p)) {
+	case ".png", ".jpg", ".jpeg", ".webp":
+		return true
+	}
+	return false
+}
+
+// sequencePath 把路径补成序列帧模板：没有图片扩展名就补 .png，
+// 还没有 %d 就在扩展名前插 _%04d。
+func sequencePath(out string) string {
+	ext := filepath.Ext(out)
+	if !isImageExt(out) {
+		ext = ".png"
+		out += ext
+	}
+	if strings.Contains(out, "%") {
+		return out
+	}
+	return strings.TrimSuffix(out, ext) + "_%04d" + ext
 }
 
 const (

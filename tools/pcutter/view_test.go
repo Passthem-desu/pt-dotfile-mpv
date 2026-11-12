@@ -214,11 +214,15 @@ func TestCommandCompletion(t *testing.T) {
 		t.Fatalf("Tab 补全: %q", a.cmd)
 	}
 	tst.Key(0, ui.KeyTab)
+	if a.cmd != "exportSeq" {
+		t.Fatalf("再 Tab: %q", a.cmd)
+	}
+	tst.Key(0, ui.KeyTab)
 	if a.cmd != "exportTile" {
 		t.Fatalf("再 Tab: %q", a.cmd)
 	}
 	tst.Key(ui.Ctrl, ui.KeyP)
-	if a.cmd != "export" {
+	if a.cmd != "exportSeq" {
 		t.Fatalf("C-p 回退: %q", a.cmd)
 	}
 }
@@ -259,6 +263,30 @@ func TestExportTarget(t *testing.T) {
 	out, kind, err = exportTarget(info, nil, kindTile)
 	if err != nil || kind != kindTile || out != filepath.Join("/v", "clip-tile.png") {
 		t.Fatalf("tile = %q (%v) %v", out, kind, err)
+	}
+
+	// :exportSeq 是 :export XXX.png 的简写：图片扩展名照留，没写就补 .png
+	seq := []struct {
+		args []string
+		want string
+	}{
+		{nil, filepath.Join("/v", "clip_%04d.png")}, // 不给名字 → 同默认序列名
+		{[]string{"/tmp/s"}, "/tmp/s_%04d.png"},
+		{[]string{"/tmp/s.jpg"}, "/tmp/s_%04d.jpg"},
+		{[]string{"/tmp/s_%03d.webp"}, "/tmp/s_%03d.webp"}, // 已经带 %d 就不动
+		{[]string{"out.mp4"}, "out.mp4_%04d.png"},          // 非图片扩展名当名字的一部分
+	}
+	for _, c := range seq {
+		out, kind, err = exportTarget(info, c.args, kindImages)
+		if err != nil || kind != kindImages || out != c.want {
+			t.Fatalf("exportSeq %v = %q (%v) %v, want %q", c.args, out, kind, err, c.want)
+		}
+	}
+
+	// :export 给视频扩展名还是视频，不会被 exportSeq 的规则影响
+	out, kind, err = exportTarget(info, []string{"/tmp/z.mkv"}, kindVideo)
+	if err != nil || kind != kindVideo || out != "/tmp/z.mkv" {
+		t.Fatalf("视频 = %q (%v) %v", out, kind, err)
 	}
 }
 
@@ -473,6 +501,26 @@ func TestTileStartsWithoutAsking(t *testing.T) {
 	}
 	if a.busy == "" {
 		t.Fatal("应该已经开始导出了")
+	}
+	if a.cancel != nil {
+		a.cancel()
+	}
+}
+
+// :exportSeq 不用写 .png 就能导序列帧，输出名自动带 _%04d。
+func TestExportSeqShortcut(t *testing.T) {
+	a := testApp(30)
+	tst := newTester(t, a)
+
+	tst.TypeKey(ui.Shift, ui.KeySemicolon, ":")
+	tst.Type("exportSeq " + filepath.Join(t.TempDir(), "s"))
+	tst.Key(0, ui.KeyEnter)
+
+	if a.confirm != nil {
+		t.Fatal("序列帧不该弹框")
+	}
+	if !strings.HasSuffix(a.busy, "s_%04d.png") {
+		t.Fatalf("busy = %q（应该导序列帧）", a.busy)
 	}
 	if a.cancel != nil {
 		a.cancel()
